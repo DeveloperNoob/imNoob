@@ -858,7 +858,7 @@ async def auto_filter(client, msg, spoll=False):
                 else:
                     Send_message = await client.send_video(
                         chat_id=msg.chat.id,
-                        video="https://telegra.ph/file/3e9f7db0c98e6b236c2c7.mp4",
+                        video="https://telegra.ph/file/1fbdc1703b58c5c0ed242.mp4",
                         caption=f"Couldn't Find This Series.Please Try Again Or Search On Our "
                                 f"<b><a href='https://t.me/TvSeriesLand4U_Updates'>Channel</a></b>. \n\n"
                                 f"ഈ സീരീസ്ന്റെ ഒറിജിനൽ പേര് ഗൂഗിളിൽ പോയി കണ്ടെത്തി അതുപോലെ ഇവിടെ കൊടുക്കുക 🥺",
