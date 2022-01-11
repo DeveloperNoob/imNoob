@@ -45,7 +45,7 @@ Read [this](https://telegram.dog/TeamEvamaria/12) before you start messing up wi
 * `LOG_CHANNEL` : A channel to log the activities of bot. Make sure bot is an admin in the channel.
 ### Optional Variables
 * `PICS`: Telegraph links of images to show in start message.( Multiple images can be used seperated by space )
-* Check [info.py](https://github.com/EvamariaTG/evamaria/blob/master/info.py) for more
+* Check [info.p](https://github.com/EvamariaTG/evamaria/blob/master/info.py) for more
 
 
 ## Deploy
