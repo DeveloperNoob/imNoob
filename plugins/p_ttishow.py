@@ -885,7 +885,7 @@ async def auto_filter(client, msg, spoll=False):
         btn = [
             [
                 InlineKeyboardButton(
-                    text=f"[{get_size(file.file_size)}] - {file.file_name}", callback_data=f'files#{file.file_id}'
+                    text=f"[{get_size(file.file_size)}]{file.file_name}", callback_data=f'files#{file.file_id}'
                 ),
             ]
             for file in files
@@ -1026,7 +1026,7 @@ async def advantage_spell_chok(client, msg):
         )
         await asyncio.sleep(15)  # in seconds
         await Send_message.delete()
-        # k = await msg.reply("I couldn't find any movie in that name.")
+        # k = await msg.reply("I couldn't find any Serie in that name.")
         # await asyncio.sleep(8)
         # await k.delete()
         return
