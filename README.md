@@ -25,7 +25,7 @@
 - [x] Index
 - [x] IMDB search
 - [x] Inline Search
-- [x] Random pics
+- [x] Random pi
 - [x] ids and User info 
 - [x] Stats, Users, Chats, Ban, Unban, Leave, Disable, Channel
 - [x] Spelling Check Feature
