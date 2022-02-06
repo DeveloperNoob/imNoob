@@ -48,7 +48,7 @@ DATABASE_NAME = environ.get('DATABASE_NAME', 'Adv_Auto_Filter')
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Adv_Auto_Filter')
 
 # Others
-LOG_CHANNEL = int(environ.get('LOG_CHANNEL', 0))
+LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-724048562'))
 SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'TeamEvamaria')
 P_TTI_SHOW_OFF = is_enabled((environ.get('P_TTI_SHOW_OFF', "False")), False)
 IMDB = is_enabled((environ.get('IMDB', "False")), True)
@@ -62,8 +62,11 @@ SHORT_LINK_API_KEY = environ.get("SHORT_LINK_API_KEY", None)
 TG_MAX_MSG_SELECT = int(environ.get('TG_MAX_MSG_SELECT', 1000))
 USE_AS_BOT = environ.get("USE_AS_BOT", True)
 TMP_DOWNLOAD_DIRECTORY = "./UFSBotz/"
+AUTO_DELETE = True
+DELETE_TIME  = 120
 INDEX_REQ_CHANNEL = int(environ.get('INDEX_REQ_CHANNEL', LOG_CHANNEL))
 
+FILE_PROTECT = {}
 IMPORTED = {}
 HELPABLE = {}
 dispatcher = None
