@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -8,26 +9,30 @@ import asyncio
 from bot import Bot
 from Script import script
 from pyrogram import Client, filters
+from pyrogram.raw.functions import messages as rmsg
 from database.batch_db import get_batch
 from pyrogram.errors.exceptions.bad_request_400 import ChatAdminRequired
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from database.ia_filterdb import Media, get_file_details, unpack_new_file_id
 from database.users_chats_db import db
-from info import CHANNELS, ADMINS, AUTH_CHANNEL, CUSTOM_FILE_CAPTION, LOG_CHANNEL, PICS, HELPABLE
+from info import CHANNELS, ADMINS, AUTH_CHANNEL, CUSTOM_FILE_CAPTION, LOG_CHANNEL, PICS, HELPABLE, FILE_PROTECT
 from plugins.misc import paginate_modules
+from database.settings_db import sett_db
+from database.connections_mdb import active_connection
 from utils import get_size, is_subscribed, temp
 import re
 
 logger = logging.getLogger(__name__)
+BATCH_FILES = {}
 
 
-@Client.on_message(filters.command("start"))
+@Client.on_message(filters.command("start") & filters.incoming & ~filters.edited)
 async def start(client, message):
     if message.chat.type in ['group', 'supergroup']:
         if message.from_user.id in ADMINS:
             buttons = [
                 [
-                    InlineKeyboardButton('📺 Updates', url='https://t.me/TvSeriesLand4U_Updates')
+                    InlineKeyboardButton('🗞️ Updates', url='https://t.me/M76Links')
                 ],
                 [
                     InlineKeyboardButton('ℹ️ Help', url=f"https://t.me/{temp.U_NAME}?start=help"),
@@ -49,7 +54,7 @@ async def start(client, message):
             return
         else:
             btn = [[
-                InlineKeyboardButton("Series Updates", url="https://t.me/TvSeriesLand_Updates")
+                InlineKeyboardButton("🚀 Updates", url="https://t.me/TvSeriesLand4U_Updates")
             ]]
             message.reply("Goto My PM, Then Click Start.. Here You Are Restricted By Admins...", reply_markup=btn)
             return
@@ -60,7 +65,7 @@ async def start(client, message):
     if len(message.command) != 2:
         buttons = [[
             InlineKeyboardButton('🔍 Search', switch_inline_query_current_chat=''),
-            InlineKeyboardButton('📺 Updates', url='https://t.me/TvSeriesLand4U_Updates')
+            InlineKeyboardButton('🗞️ Updates', url='https://t.me/M76Links')
         ], [
             InlineKeyboardButton('ℹ️Help', callback_data='help'),
             InlineKeyboardButton('😊 About', callback_data='about')
@@ -99,9 +104,9 @@ async def start(client, message):
     if len(message.command) == 2 and message.command[1] in ["subscribe", "error", "okay", "help"]:
         buttons = [[
             InlineKeyboardButton('🔍 Search', switch_inline_query_current_chat=''),
-            InlineKeyboardButton('📺 Updates', url='https://t.me/TvSeriesLand4U_Updates')
+            InlineKeyboardButton('🗞️ Updates', url='https://t.me/TvSeriesLand4U_Updates')
         ], [
-            InlineKeyboardButton('ℹ️ Help', callback_data='help'),
+            InlineKeyboardButton('ℹ️Help', callback_data='help'),
             InlineKeyboardButton('😊 About', callback_data='about')
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -114,42 +119,123 @@ async def start(client, message):
         return
 
     file_id = message.command[1]
-    unique_id, f_id, file_ref, caption = await get_batch(file_id)
+    # unique_id, f_id, file_ref, caption = await get_batch(file_id)
 
-    if unique_id:
-        temp_msg = await message.reply("Please wait...")
-        file_args = f_id.split("#")
-        cap_args = caption.split("#")
-        i = 0
-        await asyncio.sleep(2)
-        await temp_msg.delete()
-        for b_file in file_args:
-            f_caption = cap_args[i]
-            if f_caption is None:
-                f_caption = ""
-            f_caption = f_caption + f"\n\n<code>┈•••</code> @TvSeriesLand4U <code>•••┈</code>"
-            i += 1
+    if FILE_PROTECT.get(message.from_user.id):
+        grpid = FILE_PROTECT.get(message.from_user.id)
+        settings = await sett_db.get_settings(str(grpid))
+        del FILE_PROTECT[message.from_user.id]
+    # FILE_PROTECT[message.from_user.id] = str(message.chat.id)
+
+    if not settings:
+        FILE_SECURE = False
+    else:
+        FILE_SECURE = settings["file_secure"]
+    files_ = await get_file_details(file_id)
+    if not files_:
+        sts = await message.reply("`⏳ Please Wait...`", parse_mode='markdown')
+        msgs = BATCH_FILES.get(file_id)
+        if not msgs:
+            file = await client.download_media(file_id)
             try:
-                await client.send_cached_media(
-                    chat_id=message.from_user.id,
-                    file_id=b_file,
-                    caption=f_caption,
-                    parse_mode="html",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    '📺 JOIN 📺', url="https://t.me/TvSeriesLand_Updates"
-                                )
-                            ]
-                        ]
-                    )
-                )
-            except Exception as err:
-                return await message.reply(f"{str(err)}")
-            await asyncio.sleep(1)
+                with open(file) as file_data:
+                    msgs = json.loads(file_data.read())
+            except:
+                await sts.edit("FAILED")
+                return await client.send_message(LOG_CHANNEL, "UNABLE TO OPEN FILE.")
+            os.remove(file)
+            BATCH_FILES[file_id] = msgs
+        await asyncio.sleep(1)
+        await sts.delete()
+        for msg in msgs:
+            title = msg.get("title")
+            size = get_size(int(msg.get("size", 0)))
+            f_caption = msg.get("caption", "")
+            file_type = msg.get("file_type")
+            entities = msg.get("entities")
 
-        return await message.reply(f"<b><a href='https://t.me/TvSeriesLand4U_Updates'>Thank For Using Me...</a></b>")
+            if f_caption is None:
+                f_caption = f"{title}"
+            f_sub_caption = f"<code>🚀 Size: {size}</code>\n\n🌟༺ ──•◈•─ ─•◈•──༻🌟\n<b>➧ പുതിയ സിനിമകൾ / വെബ്‌ സീരീസ് " \
+                    f"വേണോ? എന്നാൽ പെട്ടെന്ന് ഗ്രൂപ്പിൽ ജോയിൻ ആയിക്കോ\n\n🎬 Gʀᴏᴜᴘ: " \
+                    f"@onlymovie76 \n📺 Gʀᴏᴜᴘ: @TvSeriesLand4U \n🗞️ " \
+                    f"Cʜᴀɴɴᴇʟ: @M76Links \n\n🎗️ʝσιи 🎗️ ѕнαяє🎗️ ѕυρρσят🎗️ </b>"
+
+            # f_caption + f"\n\n<code>Join:-@TvSeriesLand4U \n\n🚀 Size: {size}</code>"
+            try:
+                if file_type not in ["video", 'audio', 'document']:
+                    await client.send_cached_media(
+                        chat_id=message.from_user.id,
+                        file_id=msg.get("file_id"),
+                        caption=f_caption,
+                        protect_content=FILE_SECURE,
+                        caption_entities=entities,
+                    )
+                else:
+                    await client.send_cached_media(
+                        chat_id=message.from_user.id,
+                        file_id=msg.get("file_id"),
+                        caption=f_caption + f"\n\n{f_sub_caption}",
+                        parse_mode="html",
+                        protect_content=FILE_SECURE,
+                        reply_markup=InlineKeyboardMarkup(
+                            [
+                                [
+                                    InlineKeyboardButton(
+                                        '📺 Wᴇʙ Sᴇʀɪᴇs', url="https://t.me/TvSeriesLand4U"
+                                    ),
+                                    InlineKeyboardButton(
+                                        '🎬 ᴍᴏᴠɪᴇs', url="https://t.me/onlymovie76"
+                                    )
+                                ],
+                                [
+                                    InlineKeyboardButton(
+                                        '🗞️ Updates', url="https://t.me/M76Links"
+                                    )
+                                ]
+                            ]
+                        )
+                    )
+            except Exception as err:
+                await sts.edit("FAILED")
+                return await client.send_message(LOG_CHANNEL, f"{str(err)}")
+            await asyncio.sleep(0.5)
+        return await message.reply(f"<b><a href='https://t.me/TvSeriesLand4U'>Thank For Using Me...</a></b>")
+
+    # if unique_id:
+    #     temp_msg = await message.reply("Please wait...")
+    #     file_args = f_id.split("#")
+    #     cap_args = caption.split("#")
+    #     i = 0
+    #     await asyncio.sleep(2)
+    #     await temp_msg.delete()
+    #     for b_file in file_args:
+    #         f_caption = cap_args[i]
+    #         if f_caption is None:
+    #             f_caption = ""
+    #         f_caption = f_caption + f"\n\n<code>Join:-</code> @TvSeriesLand4U </code>"
+    #         i += 1
+    #         try:
+    #             await client.send_cached_media(
+    #                 chat_id=message.from_user.id,
+    #                 file_id=b_file,
+    #                 caption=f_caption,
+    #                 parse_mode="html",
+    #                 reply_markup=InlineKeyboardMarkup(
+    #                     [
+    #                         [
+    #                             InlineKeyboardButton(
+    #                                 '💬 ᴄᴏɴᴛᴀᴄᴛ ᴍᴇ 💬', url="https://t.me/TvSeriesLandAdminBot"
+    #                             )
+    #                         ]
+    #                     ]
+    #                 )
+    #             )
+    #         except Exception as err:
+    #             return await message.reply(f"{str(err)}")
+    #         await asyncio.sleep(1)
+    #
+    #     return await message.reply(f"<b><a href='https://t.me/TvSeriesLand4U'>Thank For Using Me...</a></b>")
 
     files_ = await get_file_details(file_id)
     if not files_:
@@ -166,17 +252,31 @@ async def start(client, message):
             f_caption = f_caption
     if f_caption is None:
         f_caption = f"{files.file_name}"
-    f_caption = f_caption + f"\n\n<code>┈••• @TvSeriesLand4U •••┈\n\n"
+    f_sub_caption = f"<code>🚀 Size: {size}</code>\n\n🌟༺ ──•◈•─ ─•◈•──༻🌟\n<b>➧ പുതിയ സിനിമകൾ / വെബ്‌ സീരീസ് " \
+                    f"വേണോ? എന്നാൽ പെട്ടെന്ന് ഗ്രൂപ്പിൽ ജോയിൻ ആയിക്കോ\n\n🎬 Gʀᴏᴜᴘ: " \
+                    f"@onlymovie76 \n📺 Gʀᴏᴜᴘ: @TvSeriesLand4U \n🗞️ " \
+                    f"Cʜᴀɴɴᴇʟ: @M76Links \n\n🎗️ʝσιи 🎗️ ѕнαяє🎗️ ѕυρρσят🎗️ </b>"
+
+    f_caption = f_caption + f"\n\n{f_sub_caption}"
     await client.send_cached_media(
         chat_id=message.from_user.id,
         file_id=file_id,
         caption=f_caption,
         parse_mode="html",
+        protect_content=FILE_SECURE,
         reply_markup=InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        '📺 JOIN 📺', url="https://t.me/TvSeriesLand4U_Updates"
+                        '📺 Wᴇʙ Sᴇʀɪᴇs', url="https://t.me/TvSeriesLand4U"
+                    ),
+                    InlineKeyboardButton(
+                        '🎬 ᴍᴏᴠɪᴇs', url="https://t.me/onlymovie76"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        '🗞️ Updates', url="https://t.me/M76Links"
                     )
                 ]
             ]
@@ -266,6 +366,9 @@ async def delete(bot, message):
             break
     else:
         await msg.edit('This Is Not Supported File Format')
+        await asyncio.sleep(2)
+        await msg.delete()
+        await message.delete()
         return
 
     file_id, file_ref = unpack_new_file_id(media.file_id)
@@ -275,6 +378,10 @@ async def delete(bot, message):
     })
     if result.deleted_count:
         await msg.edit('File Is Successfully Deleted From Database')
+        await asyncio.sleep(2)
+        await msg.delete()
+        await reply.delete()
+        await message.delete()
     else:
         file_name = re.sub(r"(_|\-|\.|\+)", " ", str(media.file_name))
         result = await Media.collection.delete_one({
@@ -284,6 +391,10 @@ async def delete(bot, message):
         })
         if result.deleted_count:
             await msg.edit('File Is Successfully Deleted From Database')
+            await asyncio.sleep(2)
+            await msg.delete()
+            await reply.delete()
+            await message.delete()
         else:
             # files indexed before https://github.com/EvamariaTG/EvaMaria/commit/f3d2a1bcb155faf44178e5d7a685a1b533e714bf#diff-86b613edf1748372103e94cacff3b578b36b698ef9c16817bb98fe9ef22fb669R39 
             # have original file name.
@@ -294,8 +405,15 @@ async def delete(bot, message):
             })
             if result.deleted_count:
                 await msg.edit('File Is Successfully Deleted From Database')
+                await asyncio.sleep(2)
+                await msg.delete()
+                await reply.delete()
+                await message.delete()
             else:
                 await msg.edit('File Not Found In Database')
+                await asyncio.sleep(2)
+                await msg.delete()
+                await message.delete()
 
 
 @Client.on_message(filters.command('deleteall') & filters.user(ADMINS))
@@ -354,3 +472,101 @@ def send_help(client, chat_id, text, keyboard=None):
                         text=text,
                         parse_mode="markdown",
                         reply_markup=keyboard)
+
+
+@Client.on_message(filters.command('settings') & filters.private)
+async def settings(client, message):
+    userid = message.from_user.id if message.from_user else None
+    if not userid:
+        return await message.reply(f"You are anonymous admin. Use /connect {message.chat.id} in PM")
+    chat_type = message.chat.type
+    args = message.text.html.split(None, 1)
+
+    if chat_type == "private":
+        grpid = await active_connection(str(userid))
+        if grpid is not None:
+            grp_id = grpid
+            try:
+                chat = await client.get_chat(grpid)
+                title = chat.title
+            except:
+                await message.reply_text("Make sure I'm present in your group!!", quote=True)
+                return
+        else:
+            await message.reply_text("I'm not connected to any groups!", quote=True)
+            return
+
+    elif chat_type in ["group", "supergroup"]:
+        grp_id = message.chat.id
+        title = message.chat.title
+
+    else:
+        return
+
+    st = await client.get_chat_member(grp_id, userid)
+    if (
+            st.status != "administrator"
+            and st.status != "creator"
+            and str(userid) not in ADMINS
+    ):
+        return
+
+    if not await sett_db.is_settings_exist(str(grp_id)):
+        await sett_db.add_settings(str(grp_id), True, 120)
+
+    settings = await sett_db.get_settings(str(grp_id))
+
+    if settings is not None:
+        buttons = [
+            [
+                InlineKeyboardButton('Filter Button',
+                                     callback_data=f'setgs#button#{settings["button"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton('Single' if settings["button"] else 'Double',
+                                     callback_data=f'setgs#button#{settings["button"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ],
+            [
+                InlineKeyboardButton('Bot PM',
+                                     callback_data=f'setgs#botpm#{settings["botpm"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton('✅ Yes' if settings["botpm"] else '❌ No',
+                                     callback_data=f'setgs#botpm#{settings["botpm"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ],
+            [
+                InlineKeyboardButton('File Secure',
+                                     callback_data=f'setgs#file_secure#{settings["file_secure"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton('✅ Yes' if settings["file_secure"] else '❌ No',
+                                     callback_data=f'setgs#file_secure#{settings["file_secure"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ],
+            [
+                InlineKeyboardButton('IMDB',
+                                     callback_data=f'setgs#imdb#{settings["imdb"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton('✅ Yes' if settings["imdb"] else '❌ No',
+                                     callback_data=f'setgs#imdb#{settings["imdb"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ],
+            [
+                InlineKeyboardButton('Spell Check',
+                                     callback_data=f'setgs#spell_check#{settings["spell_check"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton('✅ Yes' if settings["spell_check"] else '❌ No',
+                                     callback_data=f'setgs#spell_check#{settings["spell_check"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ],
+            [
+                InlineKeyboardButton('Auto Delete',
+                                     callback_data=f'setgs#delete#{settings["auto_delete"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton(f'{settings["delete_time"]} Sec' if settings["auto_delete"] else '❌ No',
+                                     callback_data=f'setgs#delete#{settings["auto_delete"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ],
+            [
+                InlineKeyboardButton('Welcome',
+                                     callback_data=f'setgs#welcome#{settings["welcome"]}#{str(grp_id)}#{settings["delete_time"]}'),
+                InlineKeyboardButton('✅ Yes' if settings["welcome"] else '❌ No',
+                                     callback_data=f'setgs#welcome#{settings["welcome"]}#{str(grp_id)}#{settings["delete_time"]}')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        await message.reply_text(
+            text=f"<b>Change Your Filter Settings As Your Wish ⚙\n\nThis Settings For Group</b> <code>{title}</code>",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+            parse_mode="html",
+            reply_to_message_id=message.message_id
+        )
