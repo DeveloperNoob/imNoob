@@ -1,16 +1,24 @@
 import logging
 from pyrogram import Client, emoji, filters
 from pyrogram.errors.exceptions.bad_request_400 import QueryIdInvalid
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultCachedDocument
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultCachedDocument, InlineQuery
 from database.ia_filterdb import get_search_results
-from utils import is_subscribed, get_size
+from utils import is_subscribed, get_size, temp
 from info import CACHE_TIME, AUTH_USERS, AUTH_CHANNEL, CUSTOM_FILE_CAPTION
 
 logger = logging.getLogger(__name__)
 cache_time = 0 if AUTH_USERS or AUTH_CHANNEL else CACHE_TIME
 
 
-@Client.on_inline_query(filters.user(AUTH_USERS) if AUTH_USERS else None)
+async def inline_users(query: InlineQuery):
+    if AUTH_USERS and query.from_user and query.from_user.id in AUTH_USERS:
+        return True
+    if query.from_user and query.from_user.id not in temp.BANNED_USERS:
+        return True
+    return False
+
+
+@Client.on_inline_query()
 async def answer(bot, query):
     """Show search results for given inline query"""
 
@@ -40,15 +48,16 @@ async def answer(bot, query):
     for file in files:
         title = file.file_name
         size = get_size(file.file_size)
-        f_caption = file.caption
-        if CUSTOM_FILE_CAPTION:
-            try:
-                f_caption = CUSTOM_FILE_CAPTION.format(file_name=title, file_size=size, file_caption=f_caption)
-            except Exception as e:
-                logger.exception(e)
-                f_caption = f_caption
+        f_caption = file.file_name
+        # if CUSTOM_FILE_CAPTION:
+        #     try:
+        #         f_caption = CUSTOM_FILE_CAPTION.format(file_name=title, file_size=size, file_caption=f_caption)
+        #     except Exception as e:
+        #         logger.exception(e)
+        #         f_caption = f_caption
         if f_caption is None:
             f_caption = f"{file.file_name}"
+        f_caption = f_caption + f"\n\n<code>📺 Join:- @TvSeriesLand4U\n\n🚀 Size: {size}</code>"
         results.append(
             InlineQueryResultCachedDocument(
                 title=file.file_name,
